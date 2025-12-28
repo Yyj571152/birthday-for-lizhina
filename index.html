@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>李志娜 - 生日快乐</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Great+Vibes&display=swap" rel="stylesheet">
+    
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #050505; color: white; perspective: 1000px; }
+        #canvas-container { width: 100vw; height: 100vh; display: block; position: fixed; top: 0; z-index: 1; }
+        
+        #ui {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; display: flex; flex-direction: column;
+            align-items: center; z-index: 10;
+        }
+        
+        h1 {
+            font-family: 'Ma Shan Zheng', cursive;
+            font-size: 3.5rem; 
+            margin-top: 6vh; 
+            text-align: center;
+            background: linear-gradient(to right, #fff, #ffcc00, #ff00ff);
+            -webkit-background-clip: text;
+            color: transparent;
+            text-shadow: 0 0 30px rgba(255,0,255,0.5);
+            opacity: 0; transition: opacity 2s;
+            letter-spacing: 2px;
+            z-index: 20;
+        }
+
+        .en-text {
+            display: block; font-family: 'Great Vibes', cursive;
+            font-size: 2.8rem; margin-top: 5px; color: #00ffff;
+            text-shadow: 0 0 10px #00ffff; background: none; -webkit-background-clip: unset;
+        }
+        
+        .btn {
+            pointer-events: auto; padding: 15px 50px; 
+            border: 1px solid rgba(255,255,255,0.6);
+            background: rgba(0, 0, 0, 0.6); color: #fff; font-size: 1.2rem;
+            cursor: pointer; transition: 0.3s; border-radius: 50px;
+            box-shadow: 0 0 25px rgba(255,0,255,0.3); 
+            margin-top: 45vh; backdrop-filter: blur(5px);
+            font-family: 'Ma Shan Zheng', sans-serif; letter-spacing: 2px;
+        }
+        .btn:hover { background: #bd00ff; box-shadow: 0 0 50px #bd00ff; transform: scale(1.1); }
+
+        /* --- 彻底修复：使用 Flexbox 布局 --- */
+        #photo-container {
+            position: absolute; 
+            top: 0; left: 0; width: 100%; height: 100%; /* 铺满全屏 */
+            display: none; /* JS控制显示 */
+            justify-content: center; /* 水平居中 */
+            align-items: center; /* 垂直居中 */
+            z-index: 20;
+            pointer-events: none;
+            transform-style: preserve-3d;
+        }
+
+        .photo-card {
+            position: relative; /* 相对定位，不再绝对定位 */
+            width: 350px; height: 480px;
+            background: #fff;
+            padding: 10px 10px 50px 10px;
+            box-sizing: border-box;
+            box-shadow: 0 0 50px rgba(0, 255, 255, 0.6);
+            transform: translateZ(0);
+            backface-visibility: hidden;
+            overflow: hidden;
+            
+            /* 【关键修改】强制往下偏移 100px */
+            margin-top: 700px; 
+        }
+
+        .photo-card img {
+            width: 100%; height: 100%; object-fit: cover;
+            border: 1px solid #ddd;
+        }
+
+        .hologram-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.2) 50%, rgba(0,0,0,0.2));
+            background-size: 100% 4px;
+            pointer-events: none; opacity: 0.3; z-index: 2;
+        }
+
+        .shine-effect {
+            position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
+            background: linear-gradient(to right, transparent, rgba(255,255,255,0.4), transparent);
+            transform: rotate(45deg);
+            animation: shine 3s infinite;
+            pointer-events: none;
+        }
+        @keyframes shine { 0% { transform: translateX(-100%) rotate(45deg); } 100% { transform: translateX(100%) rotate(45deg); } }
+
+        #loader { font-size: 0.9rem; color: #888; margin-top: 20px; font-family: sans-serif;}
+    </style>
+    
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.module.js",
+            "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/jsm/"
+        }
+    }
+    </script>
+</head>
+<body>
+
+    <div id="canvas-container"></div>
+
+    <div id="ui">
+        <h1 id="title">李志娜<span class="en-text">Happy Birthday</span></h1>
+        
+        <button id="start-btn" class="btn">✨ 生日快乐 ✨</button>
+        <div id="loader">资源装载中...</div>
+
+        <div id="photo-container">
+            <div class="photo-card" id="current-photo-card">
+                <div class="hologram-overlay"></div>
+                <div class="shine-effect"></div>
+                <img id="photo-img" src="" alt="Memory">
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+        import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+        import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+        import { gsap } from 'https://cdn.jsdelivr.net/npm/gsap@3.9.1/index.js';
+
+        const loader = document.getElementById('loader');
+        const startBtn = document.getElementById('start-btn');
+        const titleText = document.getElementById('title');
+        const photoContainer = document.getElementById('photo-container');
+        const photoImg = document.getElementById('photo-img');
+        const photoCard = document.getElementById('current-photo-card');
+        
+        loader.style.display = 'none';
+        startBtn.style.display = 'block';
+
+        // 确保照片文件名正确
+        const photos = ['p1.jpg', 'p2.jpg', 'p3.jpg', 'p4.jpg']; 
+
+        startBtn.addEventListener('click', () => {
+            gsap.to(startBtn, { scale: 0, opacity: 0, duration: 0.5, onComplete: () => startBtn.style.display = 'none' });
+            playPhotos(0);
+        });
+
+        function playPhotos(index) {
+            if (index >= photos.length) {
+                photoContainer.style.display = 'none';
+                startSequence();
+                return;
+            }
+
+            // 【关键修改】这里必须设置为 flex 才能生效居中布局
+            photoContainer.style.display = 'flex'; 
+            photoImg.src = photos[index];
+
+            const tl = gsap.timeline();
+
+            // 1. 进场：从深渊螺旋飞出
+            tl.fromTo(photoCard, 
+                { z: -800, rotation: 720, rotationY: 180, opacity: 0, scale: 0 },
+                { z: 0, rotation: -5, rotationY: 0, opacity: 1, scale: 1, duration: 1.5, ease: "elastic.out(1, 0.6)" }
+            );
+
+            // 2. 悬浮
+            tl.to(photoCard, {
+                y: -15, 
+                rotation: 5, 
+                duration: 2.5, ease: "sine.inOut", yoyo: true, repeat: -1
+            });
+
+            setTimeout(() => {
+                gsap.to(photoCard, {
+                    z: 500, opacity: 0, filter: "blur(20px)", 
+                    duration: 0.6, ease: "power2.in",
+                    onComplete: () => {
+                        gsap.set(photoCard, { filter: "blur(0px)", y: 0 });
+                        playPhotos(index + 1);
+                    }
+                });
+            }, 3000);
+        }
+
+        // --- 3D 场景 ---
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x050505, 0.002); 
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 0, 45);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+        const renderScene = new RenderPass(scene, camera);
+        const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
+        bloomPass.strength = 1.6; bloomPass.radius = 0.5; bloomPass.threshold = 0;
+        const composer = new EffectComposer(renderer);
+        composer.addPass(renderScene); composer.addPass(bloomPass);
+
+        function getTexture() {
+            const canvas = document.createElement('canvas'); canvas.width = 32; canvas.height = 32;
+            const ctx = canvas.getContext('2d');
+            const grad = ctx.createRadialGradient(16,16,0,16,16,16);
+            grad.addColorStop(0, 'rgba(255,255,255,1)'); grad.addColorStop(0.3, 'rgba(255,255,255,0.6)'); grad.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = grad; ctx.fillRect(0,0,32,32);
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        function getTextParticles(text) {
+            const canvas = document.createElement('canvas'); canvas.width = 256; canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+            ctx.font = 'bold 180px Arial'; ctx.fillStyle = 'white'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText(text, 128, 128);
+            const data = ctx.getImageData(0,0,256,256).data; const positions = [];
+            for(let y=0; y<256; y+=5) { for(let x=0; x<256; x+=5) { if(data[(y*256+x)*4]>128) positions.push((x-128)*0.12, (128-y)*0.12, 0); } }
+            return positions;
+        }
+
+        function getCakeParticles() {
+            const positions = []; const colors = [];
+            const cPurple=new THREE.Color(0xbd00ff); const cPink=new THREE.Color(0xff66cc); const cWhite=new THREE.Color(0xffffff);
+            const cGold=new THREE.Color(0xffd700); const cFire=new THREE.Color(0xffaa00);
+            function add(x,y,z,c) { positions.push(x,y,z); colors.push(c.r,c.g,c.b); }
+
+            for(let i=0; i<3000; i++) {
+                const r=Math.random()*10; const t=Math.random()*Math.PI*2; const y=(Math.random()-0.5)*5-4;
+                const fR=Math.random()>0.4?10:r; add(fR*Math.cos(t),y,fR*Math.sin(t),cPurple);
+            }
+            for(let i=0; i<200; i++) { const t=(i/200)*Math.PI*2; add(10.5*Math.cos(t),-6.5,10.5*Math.sin(t),cGold); }
+            for(let i=0; i<2000; i++) {
+                const r=Math.random()*6.5; const t=Math.random()*Math.PI*2; const y=Math.random()*4-1.5;
+                const fR=Math.random()>0.4?6.5:r; add(fR*Math.cos(t),y,fR*Math.sin(t),cPink);
+            }
+            for(let i=0; i<400; i++) { const t=(i/400)*Math.PI*2; const d=Math.abs(Math.sin(t*12))*1.5; add(6.8*Math.cos(t),2.5-d,6.8*Math.sin(t),cWhite); }
+            for(let i=0; i<300; i++) { const t=i*0.2; const y=2.5+i*0.02; add(0.4*Math.cos(t),y,0.4*Math.sin(t),cGold); }
+            for(let i=0; i<250; i++) { const r=Math.random()*0.8; const t=Math.random()*Math.PI*2; const y=8.5+Math.random()*1.5; add(r*Math.cos(t),y,r*Math.sin(t),cFire); }
+            return { positions, colors };
+        }
+
+        const shape3 = getTextParticles("3"); const shape2 = getTextParticles("2"); const shape1 = getTextParticles("1"); const shapeCake = getCakeParticles();
+        const maxParticles = shapeCake.positions.length/3;
+        const geometry = new THREE.BufferGeometry();
+        const pPos = new Float32Array(maxParticles*3); const pCol = new Float32Array(maxParticles*3);
+        for(let i=0; i<maxParticles; i++) {
+            pPos[i*3]=(Math.random()-0.5)*300; pPos[i*3+1]=(Math.random()-0.5)*300; pPos[i*3+2]=(Math.random()-0.5)*300;
+            pCol[i*3]=1; pCol[i*3+1]=1; pCol[i*3+2]=1;
+        }
+        geometry.setAttribute('position', new THREE.BufferAttribute(pPos,3));
+        geometry.setAttribute('color', new THREE.BufferAttribute(pCol,3));
+        const particles = new THREE.Points(geometry, new THREE.PointsMaterial({ size:0.5, map:getTexture(), vertexColors:true, blending:THREE.AdditiveBlending, depthWrite:false, transparent:true, opacity:0.8 }));
+        scene.add(particles);
+
+        function morphTo(tPos, tCol, dur) {
+            const cPos = particles.geometry.attributes.position.array; const cCol = particles.geometry.attributes.color.array;
+            for(let i=0; i<maxParticles; i++) {
+                let tx,ty,tz,cr,cg,cb;
+                if(tPos.length>0) { const idx=i%(tPos.length/3); tx=tPos[idx*3]; ty=tPos[idx*3+1]; tz=tPos[idx*3+2]; } else { tx=(Math.random()-0.5)*100; ty=(Math.random()-0.5)*100; tz=(Math.random()-0.5)*100; }
+                if(tCol) { cr=tCol[i*3]; cg=tCol[i*3+1]; cb=tCol[i*3+2]; } else { cr=0; cg=1; cb=1; }
+                gsap.to(cPos, {[i*3]:tx, [i*3+1]:ty, [i*3+2]:tz, duration:dur, ease:"power3.inOut", delay:Math.random()*0.1});
+                gsap.to(cCol, {[i*3]:cr, [i*3+1]:cg, [i*3+2]:cb, duration:dur});
+            }
+        }
+
+        let isCake = false;
+        function startSequence() {
+            morphTo(shape3, null, 1);
+            setTimeout(()=>morphTo(shape2,null,1), 1500);
+            setTimeout(()=>morphTo(shape1,null,1), 3000);
+            setTimeout(()=>{ isCake = true; morphTo(shapeCake.positions, shapeCake.colors, 2.5); setTimeout(()=>titleText.style.opacity=1, 2000); }, 4500);
+        }
+
+        let mouseX=0, mouseY=0;
+        document.addEventListener('mousemove', e=>{ mouseX=(e.clientX-window.innerWidth/2)*0.001; mouseY=(e.clientY-window.innerHeight/2)*0.001; });
+        const clock = new THREE.Clock();
+        function animate() {
+            requestAnimationFrame(animate); const time = clock.getElapsedTime();
+            particles.geometry.attributes.position.needsUpdate = true; particles.geometry.attributes.color.needsUpdate = true;
+            if(isCake) { particles.rotation.y += 0.002; particles.rotation.x += (mouseY-particles.rotation.x)*0.05; particles.rotation.y += (mouseX-particles.rotation.y)*0.05; particles.scale.setScalar(1+Math.sin(time)*0.05); } 
+            else { particles.rotation.y = Math.sin(time)*0.2; }
+            composer.render();
+        }
+        animate();
+        window.addEventListener('resize', ()=>{ camera.aspect=window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); composer.setSize(window.innerWidth, window.innerHeight); });
+    </script>
+</body>
+</html>
